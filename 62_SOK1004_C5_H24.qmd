@@ -1,0 +1,283 @@
+---
+title: "SOK-1004 H24 - Case 5"
+author: "Derek J. Clark"
+format: pdf
+editor: visual
+---
+
+# Instruksjoner
+
+Denne oppgaven er laget av Even S. Hvinden og oppdatert av Derek J. Clark. Sistnevnte er ansvarlig for eventuelle feil og mangler.
+
+Oppgaven skal løses interaktivt i RStudio ved å legge inn egen kode og kommentarer. Det ferdige dokumentet lagres med kandidatnummeret som navn `[kandidatnummer]_SOK1004_C5_H24.qmd` og lastes opp på deres GitHub-side. Hvis du har kandidatnummer 43, så vil filen hete `43_SOK1004_C5_H24.qmd`. Påse at koden kjører og at dere kan eksportere besvarelsen til pdf. Lever så lenken til GitHub-repositoriumet i Canvas.
+
+# Bakgrunn, læringsmål
+
+I Forelesning 7 leste dere [kapittel 1 i NOU 2015:1](https://www.regjeringen.no/contentassets/ef2418d9076e4423ab5908689da67700/no/pdfs/nou201520150001000dddpdfs.pdf) "Produktivitet - grunnlag for vekst og velferd." I denne oppgaven skal vi oppdatere tall brukt i analysen. Gjennom arbeidet vil dere repetere de grunnleggende ferdighetene i bruk av API, `tidyverse` og `ggplot` som vi har arbeidet med gjennom kurset. Dere vil også få anledning til å reflektere rundt sammenhengene i nasjonalregnskapet og å grave litt i statistikkbanken hos SSB.
+
+# Last inn pakker
+
+```{r}
+# output | false
+rm(list=ls()) 
+library(tidyverse)
+library(rjstat)
+library(httr)
+```
+
+# Oppgave I: Timeverksproduktivitet i markedsrettede fastlandsnæringer
+
+Reproduser en oppdatert versjon av Figur 1.1 "Timeverksproduktivitet, markedsrettede fastlandsnæringer" i rapporten. Her er produktivitet målt som bruttoprodukt i markedsrettet produksjon i Fastlands-Norge per timeverk, utenom bolig.
+
+## Oppgave Ia
+
+Hvorfor trekker Produktivitetskommisjon fra produksjonen av boligtjenester, offentlig etterspørsel, og inntekter fra olje og gass når de beregner produktivitet?
+
+*\[*
+
+-   **Boligtjenester**: På grunn av at verdistigning i boligmarkedet ikke er direkte omsettbart, kan dette ikke regnes som et vurderbat parameter. Selv om boligleiepriser kunne vært inkludert, ville det basert seg på antagelser som ikke nødvendigvis reflekterer realiteten.
+
+```{=html}
+<!-- -->
+```
+-   **Inntekter fra olje og gass**: Denne sektoren er svært omfattende og har en så stor påvirkning at inkluderingen av den ville påvirke resultatene så mye at man ville fått et urealistisk bilde av situasjonen.
+
+-   **Offentlig etterspørsel**: Utelatt siden det ikke omsettes på det åpne markedet.*\]*
+
+## Oppgave Ib
+
+Skriv kode som bruker en JSON-spørring til å lage en oppdatert versjon av figuren, med observasjoner fra 1996 til 2022. Beregn gjennomsnittlig årlig endring for perioden 1996 - 2005 og, 2005-2013, og 2006 - 2022. Står konklusjonen i rapporten seg?
+
+**Merknad.** Det er tidvis store revisjoner i nasjonalregnskapet. Du må regne med at individuelle tall på årlig endring kan avvike en god del, opp til et halvt prosentpoeng, mens de gjennomsnittlige veksttallene burde avvike noe mindre.
+
+**Tips:** Du henter data på timeverk og bruttoprodukt fra henholdsvis tabell 09174 og 09170.
+
+```{r}
+
+# løs oppgave 1b her
+
+# Setter lokaliteten til norsk bokmål med UTF-8.
+Sys.setlocale("LC_CTYPE", "nb_NO.UTF-8")
+
+# Laster inn tabell 0917
+
+url <- "https://data.ssb.no/api/v0/no/table/09170/"
+
+query <- '{
+  "query": [
+    {
+      "code": "NACE",
+      "selection": {
+        "filter": "vs:NRNaeringPubAgg",
+        "values": [
+          "pub2X68B",
+          "nr23fn"
+        ]
+      }
+    },
+    {
+      "code": "ContentsCode",
+      "selection": {
+        "filter": "item",
+        "values": [
+          "BNPB2"
+        ]
+      }
+    },
+    {
+      "code": "Tid",
+      "selection": {
+        "filter": "item",
+        "values": [
+          "1995",
+          "1996",
+          "1997",
+          "1998",
+          "1999",
+          "2000",
+          "2001",
+          "2002",
+          "2003",
+          "2004",
+          "2005",
+          "2006",
+          "2007",
+          "2008",
+          "2009",
+          "2010",
+          "2011",
+          "2012",
+          "2013",
+          "2014",
+          "2015",
+          "2016",
+          "2017",
+          "2018",
+          "2019",
+          "2020",
+          "2021",
+          "2022"
+        ]
+      }
+    }
+  ],
+  "response": {
+    "format": "json-stat2"
+  }
+}'
+
+hent_indeks.tmp <- url %>%
+  POST(body = query, encode = "json")
+
+# Lagrer linken som en tibble df
+df <-  hent_indeks.tmp %>%
+  content("text") %>%
+  fromJSONstat() %>%
+  as_tibble()
+
+
+# Bruker pivot wider for å gjøre om boligtjenester og fastlandstjenester til kolonner
+
+df <- df %>% 
+  pivot_wider(names_from = næring, values_from = value)
+
+df$år<- df$år%>% 
+  as.integer()
+
+df <- df %>% 
+  rename(bolig = 'Boligtjenester, egen bolig') %>% 
+  rename(fastland = '¬ Markedsrettet virksomhet Fastlands-Norge')
+
+df <- df %>% 
+  mutate(justert = fastland-bolig)
+
+
+
+
+# Laster inn tabell 09174
+
+url2 <- "https://data.ssb.no/api/v0/no/table/09174/"
+
+query2 <- '{
+  "query": [
+    {
+      "code": "NACE",
+      "selection": {
+        "filter": "vs:NRNaeringPubAgg",
+        "values": [
+          "nr23fn"
+        ]
+      }
+    },
+    {
+      "code": "ContentsCode",
+      "selection": {
+        "filter": "item",
+        "values": [
+          "Timeverk"
+        ]
+      }
+    },
+    {
+      "code": "Tid",
+      "selection": {
+        "filter": "item",
+        "values": [
+          "1995",
+          "1996",
+          "1997",
+          "1998",
+          "1999",
+          "2000",
+          "2001",
+          "2002",
+          "2003",
+          "2004",
+          "2005",
+          "2006",
+          "2007",
+          "2008",
+          "2009",
+          "2010",
+          "2011",
+          "2012",
+          "2013",
+          "2014",
+          "2015",
+          "2016",
+          "2017",
+          "2018",
+          "2019",
+          "2020",
+          "2021",
+          "2022"
+        ]
+      }
+    }
+  ],
+  "response": {
+    "format": "json-stat2"
+  }
+}'
+
+hent_indeks2.tmp <- url2 %>%
+  POST(body = query2, encode = "json")
+
+# Lagrer linken som en tibble df2
+df2 <-  hent_indeks2.tmp %>%
+  content("text") %>%
+  fromJSONstat() %>%
+  as_tibble()
+
+
+df2$år <- df2$år %>% 
+  as.integer()
+
+Kombinert_df <-
+  inner_join(df2,df, by = "år") %>% 
+  select(år, justert, value)
+
+Kombinert_df <- Kombinert_df %>% 
+  rename(timer = value,
+         netto = justert)
+# Regner ut timer i brutto
+Kombinert_df <- Kombinert_df %>% 
+  mutate(BruttoTimer = netto/timer)
+
+# Regner prosentvis endring
+Kombinert_df <- Kombinert_df %>% 
+  filter(år >= 1995) %>%
+  mutate(Endring_prosent = (BruttoTimer - lag(BruttoTimer)) / lag(BruttoTimer) * 100)
+
+# Regner ut gjennomsnittet for tidsperiodene
+gjsnitt_1 <- Kombinert_df %>% 
+  filter(år >= 1996 & år <= 2005) %>%
+  summarise(gjsnitt = mean(Endring_prosent, na.rm = TRUE))
+
+gjsnitt_2 <- Kombinert_df %>%
+  filter(år >= 2005 & år <= 2013) %>%
+  summarise(gjsnitt = mean(Endring_prosent, na.rm = TRUE))
+
+gjsnitt_3 <- Kombinert_df %>%
+  filter(år >= 2006 & år <= 2022) %>%
+  summarise(gjsnitt = mean(Endring_prosent, na.rm = TRUE))
+  
+
+
+# Generer plottet
+Kombinert_df %>%
+  filter(år >= 1996) %>% 
+ ggplot(aes(x = år, y = Endring_prosent)) +
+  geom_bar(stat = "identity", fill = "green") +
+  geom_segment(data = gjsnitt_1, aes(x = 1996, xend = 2005, y = gjsnitt, yend = gjsnitt), color = "black", size = 1) +
+  geom_segment(data = gjsnitt_2, aes(x = 2005, xend = 2013, y = gjsnitt, yend = gjsnitt), color = "black", size = 1) +
+  geom_segment(data = gjsnitt_3, aes(x = 2006, xend = 2022, y = gjsnitt, yend = gjsnitt), color = "black", size = 1) +
+  geom_text(data = gjsnitt_1, aes(x = 2000, y = gjsnitt, label = paste(round(gjsnitt, 2))), vjust = -1, color = "black") +
+  geom_text(data = gjsnitt_2, aes(x = 2009, y = gjsnitt, label = paste(round(gjsnitt, 2))), vjust = -1, color = "black") +
+  geom_text(data = gjsnitt_3, aes(x = 2017, y = gjsnitt, label = paste(round(gjsnitt, 2))), vjust = -1, color = "black") +
+  labs(title = "",
+       x = "år",
+       y = "Prosentvis endring") +
+  theme_minimal()
+  
+```
